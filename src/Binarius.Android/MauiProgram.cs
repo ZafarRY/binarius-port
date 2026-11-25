@@ -1,3 +1,4 @@
+
 using Microsoft.Maui.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -8,7 +9,9 @@ public static class MauiProgram
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder();
-        builder.UseMauiApp<App>();
+
+        builder
+            .UseMauiApp<App>();
 
 #if DEBUG
         builder.Logging.AddDebug();

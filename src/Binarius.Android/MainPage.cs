@@ -237,7 +237,7 @@ public sealed class MainPage : ContentPage
         }
         catch (Exception ex)
         {
-            await DisplayAlert("Gagal membuka file", ex.Message, "OK");
+            await DisplayAlertAsync("Gagal membuka file", ex.Message, "OK");
         }
     }
 }
