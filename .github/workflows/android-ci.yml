@@ -1,8 +1,11 @@
-name: Android CI
+
+name: Binarius Android Build
 
 on:
   push:
-    branches: [ main, develop ]
+    branches:
+      - main
+      - develop
   pull_request:
   workflow_dispatch:
 
@@ -11,57 +14,73 @@ permissions:
 
 jobs:
   build-android-arm64:
-    name: Build Android ARM64 APK
+    name: Build Binarius Android ARM64
     runs-on: ubuntu-24.04
+
     steps:
+      # 1. Checkout repository
       - name: Checkout source
         uses: actions/checkout@v4
         with:
           submodules: false
 
-      - name: Set up Java 21
+      # 2. Install Java
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up .NET 10 SDK
+      # 3. Install .NET 10
+      - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # 4. FIX: Android SDK
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
-      - name: Install Android API 36 packages
+      # 5. Install Android SDK packages
+      - name: Install Android API 36
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Install .NET MAUI Android workload
-        run: dotnet workload install maui-android
+      # 6. Install MAUI workload
+      - name: Install MAUI Android workload
+        run: |
+          dotnet workload install maui-android
 
-      - name: Restore
+      # 7. Restore dependencies
+      - name: Restore projects
         run: |
           dotnet restore src/Binarius.Android/Binarius.Android.csproj
           dotnet restore tests/Binarius.Core.SmokeTests/Binarius.Core.SmokeTests.csproj
 
+      # 8. Run tests
       - name: Run core smoke tests
-        run: dotnet run --project tests/Binarius.Core.SmokeTests/Binarius.Core.SmokeTests.csproj --configuration Release
+        run: |
+          dotnet run \
+            --project tests/Binarius.Core.SmokeTests/Binarius.Core.SmokeTests.csproj \
+            --configuration Release
 
-      - name: Build ARM64 APK
-        run: >-
-          dotnet publish src/Binarius.Android/Binarius.Android.csproj
-          --configuration Debug
-          --framework net10.0-android
-          --runtime android-arm64
-          -p:AndroidPackageFormats=apk
-          -p:EmbedAssembliesIntoApk=true
+      # 9. Build Android ARM64 APK
+      - name: Build Binarius APK
+        run: |
+          dotnet publish src/Binarius.Android/Binarius.Android.csproj \
+            --configuration Debug \
+            --framework net10.0-android \
+            --runtime android-arm64 \
+            -p:AndroidPackageFormats=apk \
+            -p:EmbedAssembliesIntoApk=true
 
+      # 10. Upload APK
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Binarius-Mobile-Android-ARM64-Debug
+          name: Binarius-Android-ARM64
           path: src/Binarius.Android/bin/Debug/net10.0-android/**/*.apk
           if-no-files-found: error
           retention-days: 14
