@@ -1,0 +1,13 @@
+using Microsoft.Maui;
+using Microsoft.Maui.Hosting;
+using Android.App;
+using Android.Runtime;
+
+namespace Binarius.Android;
+
+[Application]
+public class MainApplication(IntPtr handle, JniHandleOwnership ownership)
+    : MauiApplication(handle, ownership)
+{
+    protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
+}
