@@ -5,16 +5,16 @@ using Binarius.Core.Services;
 
 namespace Binarius.Android;
 
-public sealed class MainPage : ContentPage
+public sealed class ModderPage : ContentPage
 {
     private readonly FileInspector _inspector = new();
     private readonly Label _fileSummary;
     private readonly Label _headerPreview;
     private readonly Label _status;
 
-    public MainPage()
+    public ModderPage()
     {
-        Title = "Binarius Mobile";
+        Title = "Modder Mode";
         BackgroundColor = Color.FromArgb("#101318");
 
         _fileSummary = new Label

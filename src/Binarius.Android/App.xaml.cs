@@ -10,5 +10,9 @@ public partial class App : Application
     }
 
     protected override Window CreateWindow(IActivationState? activationState)
-        => new(new NavigationPage(new MainPage()));
+        => new(new NavigationPage(new IntroPage())
+        {
+            BarBackgroundColor = Color.FromArgb("#101318"),
+            BarTextColor = Color.FromArgb("#F3F5F7")
+        });
 }

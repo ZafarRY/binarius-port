@@ -1,4 +1,3 @@
-
 name: Binarius Android Build
 
 on:
@@ -18,55 +17,46 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      # 1. Checkout repository
       - name: Checkout source
         uses: actions/checkout@v4
         with:
           submodules: false
 
-      # 2. Install Java
       - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      # 3. Install .NET 10
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
-      # 4. FIX: Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
         with:
           packages: platform-tools
 
-      # 5. Install Android SDK packages
       - name: Install Android API 36
         run: |
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      # 6. Install MAUI workload
       - name: Install MAUI Android workload
         run: |
           dotnet workload install maui-android
 
-      # 7. Restore dependencies
       - name: Restore projects
         run: |
           dotnet restore src/Binarius.Android/Binarius.Android.csproj
           dotnet restore tests/Binarius.Core.SmokeTests/Binarius.Core.SmokeTests.csproj
 
-      # 8. Run tests
       - name: Run core smoke tests
         run: |
           dotnet run \
             --project tests/Binarius.Core.SmokeTests/Binarius.Core.SmokeTests.csproj \
             --configuration Release
 
-      # 9. Build Android ARM64 APK
       - name: Build Binarius APK
         run: |
           dotnet publish src/Binarius.Android/Binarius.Android.csproj \
@@ -76,11 +66,27 @@ jobs:
             -p:AndroidPackageFormats=apk \
             -p:EmbedAssembliesIntoApk=true
 
-      # 10. Upload APK
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+      # Pilih tepat satu APK (utamakan yang -Signed, karena itu yang bisa diinstall)
+      - name: Pick single APK
+        run: |
+          mkdir -p dist
+          APK=$(find src/Binarius.Android/bin -name '*-Signed.apk' | head -n 1)
+          if [ -z "$APK" ]; then
+            APK=$(find src/Binarius.Android/bin -name '*.apk' | head -n 1)
+          fi
+          if [ -z "$APK" ]; then
+            echo "APK tidak ditemukan" >&2
+            find src/Binarius.Android/bin -type f | head -50
+            exit 1
+          fi
+          echo "Memakai: $APK"
+          cp "$APK" dist/Binarius-Android-ARM64-Debug.apk
+
+      # v7 + archive:false = .apk diunggah langsung, tanpa zip
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
         with:
-          name: Binarius-Android-ARM64
-          path: src/Binarius.Android/bin/Debug/net10.0-android/**/*.apk
+          path: dist/Binarius-Android-ARM64-Debug.apk
+          archive: false
           if-no-files-found: error
           retention-days: 14
