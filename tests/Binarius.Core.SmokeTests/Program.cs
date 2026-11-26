@@ -3,6 +3,7 @@ using Binarius.Core.Models;
 using Binarius.Core.Services;
 using Binarius.Core.Compression;
 using Binarius.Core.Hashing;
+using Binarius.Core.Launchers;
 
 static void Equal<T>(T expected, T actual, string name)
 {
@@ -163,5 +164,81 @@ Equal(false, bookOne.TryGetValue(0x13579BDFu, out _), "KeyBook miss");
 
 var mergedBook = KeyBook.Merge(new[] { bookOne, new KeyBook(new[] { "ZZ_TEST_TWO" }) });
 Equal(baseBook.Count + 2, mergedBook.Count, "KeyBook merge count");
+
+// End launcher parsing
+static bool ThrowsLauncher(Action action)
+{
+    try { action(); return false; }
+    catch (LauncherException) { return true; }
+}
+
+const string endSample = """
+    [VERSN1]
+
+    {
+      "Usage": "User",
+      "Game": "Carbon",
+      "Directory": "",
+      "Endscript": "mod.endscript",
+      "Files": [
+        "GLOBAL\GLOBALA.BUN",
+        "GLOBAL\GLOBALB.LZC"
+      ],
+      "Links": [
+        {
+          "LoadType": "Attributes",
+          "PathType": "Absolute",
+          "File": "GLOBAL\attributes.bin"
+        }
+      ]
+    }
+    """;
+
+var parsedEnd = EndLauncherReader.Parse(endSample, "mod.end");
+Equal(LaunchUsage.User, parsedEnd.UsageId, "end usage");
+Equal(LaunchGame.Carbon, parsedEnd.GameId, "end game");
+Equal("mod.endscript", parsedEnd.Endscript, "end endscript");
+Equal(2, parsedEnd.Files.Count, "end files count");
+Equal("GLOBAL\\GLOBALA.BUN", parsedEnd.Files[0], "end keeps backslashes");
+Equal(1, parsedEnd.Links.Count, "end links count");
+Equal(LoaderType.Attributes, parsedEnd.Links[0].LType, "end link loader type");
+Equal(LinkPathType.Absolute, parsedEnd.Links[0].PType, "end link path type");
+parsedEnd.EnsureUserMode();
+
+// .endlauncher: no header, comments and trailing commas allowed, extension case-insensitive
+const string launcherSample = """
+    // a comment
+    {
+      "Usage": "User",
+      "Game": "MostWanted",
+      "Endscript": "mod.endscript",
+      "Files": ["GLOBAL\GLOBALB.LZC",],
+    }
+    """;
+
+var parsedLauncher = EndLauncherReader.Parse(launcherSample, "MOD.ENDLAUNCHER");
+Equal(LaunchGame.MostWanted, parsedLauncher.GameId, "endlauncher game");
+Equal(1, parsedLauncher.Files.Count, "endlauncher files count");
+Equal(0, parsedLauncher.Links.Count, "endlauncher links default to empty");
+Equal(NfsGame.MostWanted, parsedLauncher.GameId.ToNfsGame()!.Value, "game mapping");
+Equal(true, LaunchGame.None.ToNfsGame() is null, "no mapping for None");
+
+// Rejections
+Equal(true, ThrowsLauncher(() => EndLauncherReader.Parse("{ }", "bad.end")), "missing VERSN1 rejected");
+Equal(true, ThrowsLauncher(() => EndLauncherReader.Parse("[VERSN1] not json", "bad.end")), "invalid JSON rejected");
+Equal(true, ThrowsLauncher(() => EndLauncherReader.Parse("null", "bad.endlauncher")), "empty launcher rejected");
+
+var modderLauncher = EndLauncherReader.Parse("""{ "Usage": "Modder", "Game": "Carbon" }""", "m.endlauncher");
+Equal(true, ThrowsLauncher(() => modderLauncher.EnsureUserMode()), "Modder is not User");
+var noGameLauncher = EndLauncherReader.Parse("""{ "Usage": "User", "Game": "Nope" }""", "n.endlauncher");
+Equal(true, ThrowsLauncher(() => noGameLauncher.EnsureUserMode()), "unknown game rejected");
+
+// Paths and checks
+Equal("GLOBAL/GLOBALA.BUN", LauncherPaths.Normalize("GLOBAL\\GLOBALA.BUN"), "path normalize");
+var present = new HashSet<string> { "GLOBAL/GLOBALA.BUN", "mod.endscript" };
+Equal(true, parsedEnd.EndscriptExists(present.Contains), "endscript exists");
+var missing = parsedEnd.MissingFiles(present.Contains);
+Equal(1, missing.Count, "missing files count");
+Equal("GLOBAL\\GLOBALB.LZC", missing[0], "missing file name");
 
 Console.WriteLine("Binarius.Core smoke tests passed.");

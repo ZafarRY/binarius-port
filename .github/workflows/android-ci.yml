@@ -57,6 +57,17 @@ jobs:
             --project tests/Binarius.Core.SmokeTests/Binarius.Core.SmokeTests.csproj \
             --configuration Release
 
+      - name: Compile check Nikki engine
+        run: |
+          dotnet build src/Binarius.Nikki/Binarius.Nikki.csproj \
+            --configuration Release --nologo > nikki-build.log 2>&1 || true
+          echo "== error counts by code"
+          grep -oE "error CS[0-9]+" nikki-build.log | sort | uniq -c | sort -rn | head -20
+          echo "== first unique errors"
+          grep -E "error CS[0-9]+" nikki-build.log | sed 's#.*/Modules/##' | sort -u | head -60
+          echo "== result"
+          tail -3 nikki-build.log
+
       - name: Build Binarius APK
         run: |
           dotnet publish src/Binarius.Android/Binarius.Android.csproj \

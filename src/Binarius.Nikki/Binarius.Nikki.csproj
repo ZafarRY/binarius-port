@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Binarius.Nikki</AssemblyName>
+
+    <!-- Upstream sources predate nullable annotations and implicit usings -->
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);1701;1702;1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- CoreExtensions, without the Windows-only process injection -->
+    <Compile Include="..\..\Modules\CoreExtensions\CoreExtensions\**\*.cs"
+             Exclude="..\..\Modules\CoreExtensions\CoreExtensions\Native\InjectorX.cs;
+                      ..\..\Modules\CoreExtensions\CoreExtensions\Native\NativeCall.cs;
+                      ..\..\Modules\CoreExtensions\CoreExtensions\Native\NativeCallerX.cs;
+                      ..\..\Modules\CoreExtensions\CoreExtensions\obj\**;
+                      ..\..\Modules\CoreExtensions\CoreExtensions\bin\**" />
+
+    <!-- Nikki (Darius), with our Interop.cs instead of the LZCompressLib.dll one -->
+    <Compile Include="..\..\Modules\Darius\Nikki\**\*.cs"
+             Exclude="..\..\Modules\Darius\Nikki\Utils\Interop.cs;
+                      ..\..\Modules\Darius\Nikki\obj\**;
+                      ..\..\Modules\Darius\Nikki\bin\**" />
+
+    <!-- Endscript -->
+    <Compile Include="..\..\Modules\Endscript\Endscript\**\*.cs"
+             Exclude="..\..\Modules\Endscript\Endscript\obj\**;
+                      ..\..\Modules\Endscript\Endscript\bin\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Binarius.Core\Binarius.Core.csproj" />
+  </ItemGroup>
+
+</Project>

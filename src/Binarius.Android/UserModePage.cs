@@ -1,63 +1,73 @@
-using Binarius.Core.Services;
+using System.Text;
+using Binarius.Core.Launchers;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Controls.Shapes;
 using Microsoft.Maui.Storage;
 
 namespace Binarius.Android;
 
 public sealed class UserModePage : ContentPage
 {
-    private static readonly string[] LauncherExtensions = [".end", ".endlauncher"];
+    private const int MaxListed = 40;
 
-    private readonly FileInspector _inspector = new();
-    private readonly Label _summary;
-    private readonly Label _status;
+    private static readonly Color Good = Color.FromArgb("#65D6AD");
+    private static readonly Color Bad = Color.FromArgb("#FF6B6B");
+
+    private readonly Label _summary = new()
+    {
+        Text = "No End Launcher selected yet.",
+        FontFamily = "monospace",
+        FontSize = 13,
+        TextColor = ToolUi.Primary
+    };
+
+    private readonly Label _details = new()
+    {
+        FontFamily = "monospace",
+        FontSize = 12,
+        TextColor = ToolUi.Muted
+    };
+
+    private readonly Label _status = new() { FontSize = 14, TextColor = ToolUi.Muted };
 
     public UserModePage()
     {
         Title = "User Mode";
-        BackgroundColor = Color.FromArgb("#101318");
-
-        _summary = new Label
-        {
-            Text = "Belum ada End Launcher dipilih.",
-            TextColor = Color.FromArgb("#F3F5F7"),
-            FontSize = 14
-        };
-        _status = new Label
-        {
-            Text = "Pilih file .end / .endlauncher untuk memasang mod.",
-            TextColor = Color.FromArgb("#65D6AD"),
-            FontSize = 13
-        };
+        BackgroundColor = ToolUi.Background;
 
         var pick = new Button
         {
-            Text = "Pilih End Launcher",
-            BackgroundColor = Color.FromArgb("#65D6AD"),
-            TextColor = Color.FromArgb("#101318"),
+            Text = "Select End Launcher",
+            BackgroundColor = Good,
+            TextColor = ToolUi.Background,
             FontAttributes = FontAttributes.Bold,
             CornerRadius = 12,
             HeightRequest = 48
         };
         pick.Clicked += OnPickClicked;
 
-        var content = new VerticalStackLayout { Padding = new Thickness(20, 28), Spacing = 16 };
-        content.Children.Add(new Label
+        var card = new Border
         {
-            Text = "User Mode",
-            TextColor = Color.FromArgb("#F3F5F7"),
-            FontSize = 30,
-            FontAttributes = FontAttributes.Bold
-        });
+            Stroke = ToolUi.Stroke,
+            StrokeThickness = 1,
+            StrokeShape = new RoundRectangle { CornerRadius = 14 },
+            BackgroundColor = ToolUi.Surface,
+            Padding = 16,
+            Content = _summary
+        };
+
+        var content = new VerticalStackLayout { Padding = new Thickness(20, 24), Spacing = 16 };
         content.Children.Add(new Label
         {
             Text = "Install a mod",
-            TextColor = Color.FromArgb("#AAB4C0"),
-            FontSize = 13
+            TextColor = ToolUi.Primary,
+            FontSize = 26,
+            FontAttributes = FontAttributes.Bold
         });
         content.Children.Add(pick);
-        content.Children.Add(_summary);
+        content.Children.Add(card);
         content.Children.Add(_status);
+        content.Children.Add(_details);
 
         Content = new ScrollView { Content = content };
     }
@@ -66,40 +76,74 @@ public sealed class UserModePage : ContentPage
     {
         try
         {
-            var file = await FilePicker.Default.PickAsync(new PickOptions
+            var picked = await FilePicker.Default.PickAsync(new PickOptions
             {
-                PickerTitle = "Pilih End Launcher"
+                PickerTitle = "Select End Launcher"
             });
-            if (file is null) return;
+            if (picked is null) return;
 
-            // Android tidak bisa memfilter per ekstensi, jadi validasi manual.
-            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-            if (!LauncherExtensions.Contains(ext))
+            string text;
+            await using (var stream = await picked.OpenReadAsync())
+            using (var reader = new StreamReader(stream))
             {
-                await DisplayAlertAsync("File tidak sesuai", "Pilih file .end atau .endlauncher.", "OK");
-                return;
+                text = await reader.ReadToEndAsync();
             }
 
-            var dir = Path.Combine(FileSystem.AppDataDirectory, "workspace", "user");
-            Directory.CreateDirectory(dir);
-            var path = Path.Combine(dir, $"{Guid.NewGuid():N}_{Path.GetFileName(file.FileName)}");
+            var launcher = EndLauncherReader.Parse(text, picked.FileName);
+            Show(picked.FileName, launcher);
 
-            await using (var src = await file.OpenReadAsync())
-            await using (var dst = File.Create(path))
-            {
-                await src.CopyToAsync(dst);
-            }
-
-            await using var stream = File.OpenRead(path);
-            var info = await _inspector.InspectAsync(stream, file.FileName);
-
-            _summary.Text = $"{info.Name}\n{info.Length:N0} byte\nWorkspace copy: {Path.GetFileName(path)}";
-            _status.Text = "File tersalin ke workspace privat. Cek Usage/Game dan eksekusi script " +
-                           "menunggu port modul Endscript.";
+            launcher.EnsureUserMode();
+            SetStatus(
+                $"Valid launcher for User Mode ({launcher.GameId}). " +
+                "Next steps: choose the mod folder and the game folder, then run the endscript " +
+                "(not active yet).",
+                Good);
+        }
+        catch (LauncherException ex)
+        {
+            SetStatus(ex.Message, Bad);
         }
         catch (Exception ex)
         {
-            await DisplayAlertAsync("Gagal membuka file", ex.Message, "OK");
+            await DisplayAlertAsync("Could not open the file", ex.Message, "OK");
         }
+    }
+
+    private void Show(string fileName, EndLauncher launcher)
+    {
+        var versioned = !string.Equals(
+            Path.GetExtension(fileName), ".endlauncher", StringComparison.OrdinalIgnoreCase);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"File      : {fileName}");
+        sb.AppendLine($"Format    : {(versioned ? "VERSN1 launcher" : "endlauncher")}");
+        sb.AppendLine($"Usage     : {launcher.Usage} ({launcher.UsageId})");
+        sb.AppendLine($"Game      : {launcher.Game} ({launcher.GameId})");
+        sb.AppendLine($"Endscript : {launcher.Endscript}");
+        sb.AppendLine($"Files     : {launcher.Files.Count}");
+        sb.Append($"Links     : {launcher.Links.Count}");
+        _summary.Text = sb.ToString();
+
+        var details = new StringBuilder();
+        AppendList(details, "Files", launcher.Files);
+        AppendList(details, "Links", launcher.Links.Select(l => $"{l.LType}/{l.PType}: {l.File}"));
+        _details.Text = details.ToString().TrimEnd();
+    }
+
+    private static void AppendList(StringBuilder sb, string title, IEnumerable<string> items)
+    {
+        var list = items.ToList();
+        if (list.Count == 0) return;
+
+        sb.AppendLine($"{title}:");
+        foreach (var item in list.Take(MaxListed)) sb.AppendLine($"  {item}");
+        if (list.Count > MaxListed) sb.AppendLine($"  ... +{list.Count - MaxListed} more");
+        sb.AppendLine();
+    }
+
+    private void SetStatus(string message, Color color)
+    {
+        _status.Text = message;
+        _status.TextColor = color;
     }
 }
