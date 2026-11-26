@@ -1,16 +1,16 @@
 
 using Android.Content;
-using Android.Net;
 using Android.Provider;
+using AndroidUri = global::Android.Net.Uri;
 
 namespace Binarius.Android;
 
 public sealed class AndroidSafFolder
 {
     private readonly ContentResolver _resolver;
-    private readonly Uri _treeUri;
+    private readonly AndroidUri _treeUri;
 
-    public AndroidSafFolder(Uri treeUri)
+    public AndroidSafFolder(AndroidUri treeUri)
     {
         _treeUri = treeUri;
 
