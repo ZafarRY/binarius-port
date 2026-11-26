@@ -415,7 +415,7 @@ public sealed class UserModePage : ContentPage
         EndLauncher launcher)
     {
         var versioned = !string.Equals(
-            Path.GetExtension(fileName),
+            System.IO.Path.GetExtension(fileName),
             ".endlauncher",
             StringComparison.OrdinalIgnoreCase);
 

@@ -29,7 +29,10 @@ public sealed class AndroidSafFolder
             var documentUri =
                 DocumentsContract.BuildDocumentUriUsingTree(
                     _treeUri, documentId);
-
+            
+            if (documentUri is null)
+                return "Unknown folder";
+            
             using var cursor = _resolver.Query(
                 documentUri,
                 new[]
@@ -71,7 +74,10 @@ public sealed class AndroidSafFolder
                 var childrenUri =
                     DocumentsContract.BuildChildDocumentsUriUsingTree(
                         _treeUri, parentId);
-
+                
+                if (childrenUri is null)
+                    return false;
+                
                 using var cursor = _resolver.Query(
                     childrenUri,
                     new[]
