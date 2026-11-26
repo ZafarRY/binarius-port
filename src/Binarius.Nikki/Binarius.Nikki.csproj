@@ -16,11 +16,12 @@
   <ItemGroup>
     <!-- CoreExtensions, without the Windows-only process injection -->
     <Compile Include="..\..\Modules\CoreExtensions\CoreExtensions\**\*.cs"
-             Exclude="..\..\Modules\CoreExtensions\CoreExtensions\Native\InjectorX.cs;
-                      ..\..\Modules\CoreExtensions\CoreExtensions\Native\NativeCall.cs;
-                      ..\..\Modules\CoreExtensions\CoreExtensions\Native\NativeCallerX.cs;
-                      ..\..\Modules\CoreExtensions\CoreExtensions\obj\**;
-                      ..\..\Modules\CoreExtensions\CoreExtensions\bin\**" />
+         Exclude="..\..\Modules\CoreExtensions\CoreExtensions\Native\InjectorX.cs;
+                  ..\..\Modules\CoreExtensions\CoreExtensions\Native\NativeCall.cs;
+                  ..\..\Modules\CoreExtensions\CoreExtensions\Native\NativeCallerX.cs;
+                  ..\..\Modules\CoreExtensions\CoreExtensions\Native\ASMBuilder.cs;
+                  ..\..\Modules\CoreExtensions\CoreExtensions\obj\**;
+                  ..\..\Modules\CoreExtensions\CoreExtensions\bin\**" />
 
     <!-- Nikki (Darius), with our Interop.cs instead of the LZCompressLib.dll one -->
     <Compile Include="..\..\Modules\Darius\Nikki\**\*.cs"
