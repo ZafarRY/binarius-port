@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <Description>Library for managing, parsing, and generating End commands based on Nikki class library.</Description>
+    <Company />
+    <Authors>MaxHwoy</Authors>
+    <Version>1.4.4.1</Version>
+    <Copyright>Copyright © 2021 MaxHwoy</Copyright>
+    <AssemblyVersion>1.4.4.1</AssemblyVersion>
+    <FileVersion>1.4.4.1</FileVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <PlatformTarget>x86</PlatformTarget>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+	
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <PlatformTarget>x86</PlatformTarget>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+	
+  <ItemGroup>
+    <ProjectReference Include="..\..\Darius\Nikki\Nikki.csproj" />
+  </ItemGroup>
+
+</Project>
