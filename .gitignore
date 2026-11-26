@@ -9,3 +9,5 @@
 *.apk
 *.aab
 artifacts/
+bin/
+obj/

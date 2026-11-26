@@ -123,9 +123,13 @@ public sealed class IntroPage : ContentPage
             case "Swatcher":
                 await Navigation.PushAsync(new SwatchPickerPage());
                 break;
-            case "New Launcher":
             case "Hasher":
+                await Navigation.PushAsync(new HasherPage());
+                break;
             case "Raider":
+                await Navigation.PushAsync(new RaiderPage());
+                break;
+            case "New Launcher":
             case "Settings":
                 await DisplayAlertAsync(choice, "Belum dipindahkan ke Android.", "OK");
                 break;
