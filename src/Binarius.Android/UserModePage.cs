@@ -112,7 +112,7 @@ public sealed class UserModePage : ContentPage
     private void Show(string fileName, EndLauncher launcher)
     {
         var versioned = !string.Equals(
-            Path.GetExtension(fileName), ".endlauncher", StringComparison.OrdinalIgnoreCase);
+            System.IO.Path.GetExtension(fileName), ".endlauncher", StringComparison.OrdinalIgnoreCase);
 
         var sb = new StringBuilder();
         sb.AppendLine($"File      : {fileName}");
