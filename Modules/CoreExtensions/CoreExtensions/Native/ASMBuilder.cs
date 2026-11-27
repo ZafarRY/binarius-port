@@ -387,7 +387,7 @@ namespace CoreExtensions.Native
         public void MovToAL(byte value)
         {
             this._asm.Add(ASMInstr.MOV_TO_AL);
-            this._asm.AddRange(BitConverter.GetBytes(value));
+            this._asm.Add(value);
         }
 
         /// <summary>
@@ -403,7 +403,7 @@ namespace CoreExtensions.Native
         public void MovToCL(byte value)
         {
             this._asm.Add(ASMInstr.MOV_TO_CL);
-            this._asm.AddRange(BitConverter.GetBytes(value));
+            this._asm.Add(value);
         }
 
         /// <summary>
@@ -419,7 +419,7 @@ namespace CoreExtensions.Native
         public void MovToDL(byte value)
         {
             this._asm.Add(ASMInstr.MOV_TO_DL);
-            this._asm.AddRange(BitConverter.GetBytes(value));
+            this._asm.Add(value);
         }
 
         /// <summary>
@@ -435,7 +435,7 @@ namespace CoreExtensions.Native
         public void MovToBL(byte value)
         {
             this._asm.Add(ASMInstr.MOV_TO_BL);
-            this._asm.AddRange(BitConverter.GetBytes(value));
+            this._asm.Add(value);
         }
 
         /// <summary>
@@ -451,7 +451,7 @@ namespace CoreExtensions.Native
         public void MovToAH(byte value)
         {
             this._asm.Add(ASMInstr.MOV_TO_AH);
-            this._asm.AddRange(BitConverter.GetBytes(value));
+            this._asm.Add(value);
         }
 
         /// <summary>
@@ -467,7 +467,7 @@ namespace CoreExtensions.Native
         public void MovToCH(byte value)
         {
             this._asm.Add(ASMInstr.MOV_TO_CH);
-            this._asm.AddRange(BitConverter.GetBytes(value));
+            this._asm.Add(value);
         }
 
         /// <summary>
@@ -483,7 +483,7 @@ namespace CoreExtensions.Native
         public void MovToDH(byte value)
         {
             this._asm.Add(ASMInstr.MOV_TO_DH);
-            this._asm.AddRange(BitConverter.GetBytes(value));
+            this._asm.Add(value);
         }
 
         /// <summary>
@@ -499,7 +499,7 @@ namespace CoreExtensions.Native
         public void MovToBH(byte value)
         {
             this._asm.Add(ASMInstr.MOV_TO_BH);
-            this._asm.AddRange(BitConverter.GetBytes(value));
+            this._asm.Add(value);
         }
 
         #endregion
