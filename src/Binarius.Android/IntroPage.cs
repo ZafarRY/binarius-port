@@ -10,6 +10,26 @@ public sealed class IntroPage : ContentPage
     private static readonly Color Primary = Color.FromArgb("#F3F5F7");
     private static readonly Color Muted = Color.FromArgb("#AAB4C0");
 
+    private static bool _askedAllFiles; // static: once per app launch
+
+    protected override async void OnAppearing()
+    {
+        base.OnAppearing();
+
+        if (_askedAllFiles || UserModeRunner.HasAllFilesAccess()) return;
+        _askedAllFiles = true;
+
+        var open = await DisplayAlertAsync(
+            "Allow All files access",
+            "Binarius needs \"All files access\" to save MainLog.txt in " +
+            "Internal storage/Binarius/logs.\n\nWithout it, logs are kept in the app's private folder.",
+            "Open settings",
+            "Later");
+
+        if (open)
+            UserModeRunner.OpenAllFilesAccessSettings();
+    }
+
     public IntroPage()
     {
         BackgroundColor = Color.FromArgb("#101318");
