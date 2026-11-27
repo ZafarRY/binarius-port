@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net6.0;net10.0</TargetFramework>
+    <TargetFrameworks>net6.0;net10.0</TargetFrameworks>
     <Version>1.6.7</Version>
     <Authors>MaxHwoy</Authors>
     <Copyright>Copyright © 2021 MaxHwoy</Copyright>
