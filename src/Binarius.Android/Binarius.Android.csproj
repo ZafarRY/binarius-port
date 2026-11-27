@@ -26,9 +26,14 @@
           BaseSize="456,456"
           Color="#3A4048" />
     <MauiSplashScreen
-      Include="Resources\Splash\splash.svg"
+      Include="Resources\AppIcon\appicon.svg"
       Color="#101318"
       BaseSize="128,128" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\Raw\LegacyData\MainKeys\*.txt"
+                      LogicalName="MainKeys/%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

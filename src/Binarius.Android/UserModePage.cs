@@ -594,7 +594,7 @@ public sealed class UserModePage : ContentPage, IUserModePrompter
         var target = System.IO.Path.Combine(keysDir, "mainkeys", name);
         System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(target)!);
 
-        await using var source = await FileSystem.OpenAppPackageFileAsync($"LegacyData/MainKeys/{name}");
+        await using var source = await KeyAssets.OpenAsync(name);
         await using var output = System.IO.File.Create(target);
         await source.CopyToAsync(output);
     }

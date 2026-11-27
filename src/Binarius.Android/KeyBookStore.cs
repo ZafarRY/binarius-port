@@ -38,8 +38,7 @@ internal static class KeyBookStore
     {
         if (Singles.TryGetValue(game, out var cached)) return cached;
 
-        await using var stream = await FileSystem.OpenAppPackageFileAsync(
-            $"LegacyData/MainKeys/{KeyBook.FileName(game)}");
+        await using var stream = await KeyAssets.OpenAsync(KeyBook.FileName(game));
         using var reader = new StreamReader(stream);
         var text = await reader.ReadToEndAsync();
 
