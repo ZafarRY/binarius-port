@@ -43,4 +43,8 @@
     <ProjectReference Include="..\Binarius.Core\Binarius.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\Modules\Endscript\Endscript\Endscript.csproj" />
+  </ItemGroup>
+
 </Project>
