@@ -1,13 +1,13 @@
-
 using System.Text;
 using Binarius.Core.Launchers;
+using Binarius.Core.Services;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Controls.Shapes;
 using Microsoft.Maui.Storage;
 
 namespace Binarius.Android;
 
-public sealed class UserModePage : ContentPage
+public sealed class UserModePage : ContentPage, IUserModePrompter
 {
     private const int MaxListed = 40;
 
@@ -114,13 +114,7 @@ public sealed class UserModePage : ContentPage
 
         _validateButton.Clicked += OnValidatePackage;
 
-        _runButton.Clicked += async (_, _) =>
-            await DisplayAlertAsync(
-                "Engine unavailable",
-                "Endscript execution has not yet been ported to Android. " +
-                "The selected folders can be validated, but no game files " +
-                "will be modified.",
-                "OK");
+        _runButton.Clicked += OnRunEndscript;
 
         var content = new VerticalStackLayout
         {
@@ -213,7 +207,7 @@ public sealed class UserModePage : ContentPage
             _gameFolderLabel.Text = "No game folder selected.";
 
             _validateButton.IsEnabled = false;
-            _runButton.IsEnabled = false;
+            SetRunEnabled(false);
 
             SetStatus(
                 $"Valid User Launcher: {launcher.GameId}. " +
@@ -261,7 +255,7 @@ public sealed class UserModePage : ContentPage
             _modFolderLabel.Text = name;
 
             _validateButton.IsEnabled = false;
-            _runButton.IsEnabled = false;
+            SetRunEnabled(false);
 
             SetStatus(
                 "Mod folder selected. Select the game folder next.",
@@ -301,7 +295,7 @@ public sealed class UserModePage : ContentPage
             _validateButton.IsEnabled =
                 _modFolder is not null;
 
-            _runButton.IsEnabled = false;
+            SetRunEnabled(false);
 
             SetStatus(
                 "Game folder selected. Validate the mod package.",
@@ -392,13 +386,10 @@ public sealed class UserModePage : ContentPage
                 "All declared launcher paths were found.";
 
             SetStatus(
-                "Launcher package is valid. Folder validation completed. " +
-                "Endscript execution is not active yet.",
+                "Launcher package is valid. You can run the endscript now.",
                 Good);
 
-            // Deliberately disabled until the original engine
-            // is ported and tested on Android.
-            _runButton.IsEnabled = false;
+            SetRunEnabled(true);
         }
         catch (Exception ex)
         {
@@ -498,4 +489,137 @@ public sealed class UserModePage : ContentPage
         _status.Text = message;
         _status.TextColor = color;
     }
+
+    // ------------------------------------------------------------------ run
+
+    private async void OnRunEndscript(object? sender, EventArgs e)
+    {
+        if (_launcher is null || _modFolder is null || _gameFolder is null) return;
+
+        var launcher = _launcher;
+        var mod = _modFolder;
+        var game = _gameFolder;
+
+        var proceed = await DisplayAlertAsync(
+            "Install mod",
+            "Binarius will work on a private copy first. Your game folder is only changed " +
+            "after you choose to save, and original files are kept as .bacc backups.",
+            "Continue",
+            "Cancel");
+        if (!proceed) return;
+
+        SetRunEnabled(false);
+        _validateButton.IsEnabled = false;
+
+        var workDir = System.IO.Path.Combine(FileSystem.CacheDirectory, "usermode");
+        var keysDir = System.IO.Path.Combine(FileSystem.AppDataDirectory, "keys");
+
+        void Log(string message) =>
+            MainThread.BeginInvokeOnMainThread(() => SetStatus(message, ToolUi.Muted));
+
+        try
+        {
+            SetStatus("Preparing files...", ToolUi.Muted);
+            var staged = await Task.Run(() => UserModeStager.Stage(launcher, mod, game, workDir, Log));
+
+            await EnsureKeysAsync(keysDir, launcher);
+
+            var outcome = await UserModeRunner.RunAsync(launcher, staged, keysDir, this, Log);
+
+            if (outcome.Failure is not null)
+            {
+                SetStatus("The endscript could not be applied. No game files were changed.", Bad);
+                _details.Text = outcome.Failure;
+                return;
+            }
+
+            if (!outcome.Saved)
+            {
+                _details.Text = FormatErrors(outcome);
+                SetStatus(
+                    outcome.SaveErrors.Count > 0
+                        ? "Saving failed. No game files were changed."
+                        : "Not saved. No game files were changed.",
+                    outcome.SaveErrors.Count > 0 ? Bad : ToolUi.Warning);
+                return;
+            }
+
+            SetStatus("Writing changes to the game folder...", ToolUi.Muted);
+            var result = await Task.Run(() => UserModeStager.WriteBack(staged, game, Log));
+
+            _details.Text =
+                $"Written  : {result.Written}\n" +
+                $"Deleted  : {result.Deleted}\n" +
+                $"Backups  : {result.Backups} (.bacc)" +
+                (outcome.ScriptErrors.Count > 0 ? "\n\n" + FormatErrors(outcome) : string.Empty);
+
+            SetStatus(
+                outcome.ScriptErrors.Count == 0
+                    ? "Mod installed successfully."
+                    : $"Mod installed with {outcome.ScriptErrors.Count} script error(s).",
+                outcome.ScriptErrors.Count == 0 ? Good : ToolUi.Warning);
+        }
+        catch (LauncherException ex)
+        {
+            SetStatus(ex.Message, Bad);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Unexpected error: {ex.Message}", Bad);
+        }
+        finally
+        {
+            try { if (System.IO.Directory.Exists(workDir)) System.IO.Directory.Delete(workDir, true); }
+            catch { /* cache is cleared on the next run anyway */ }
+
+            _validateButton.IsEnabled = true;
+            SetRunEnabled(true);
+        }
+    }
+
+    private static string FormatErrors(UserModeOutcome outcome)
+    {
+        var sb = new StringBuilder();
+        AppendList(sb, "Script errors", outcome.ScriptErrors);
+        AppendList(sb, "Save errors", outcome.SaveErrors);
+        return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>The hash lists live in the app package; the engine needs real files.</summary>
+    private static async Task EnsureKeysAsync(string keysDir, EndLauncher launcher)
+    {
+        if (launcher.GameId.ToNfsGame() is not { } game) return;
+
+        var name = KeyBook.FileName(game);
+        var target = System.IO.Path.Combine(keysDir, "mainkeys", name);
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(target)!);
+
+        await using var source = await FileSystem.OpenAppPackageFileAsync($"LegacyData/MainKeys/{name}");
+        await using var output = System.IO.File.Create(target);
+        await source.CopyToAsync(output);
+    }
+
+    private void SetRunEnabled(bool enabled)
+    {
+        _runButton.IsEnabled = enabled;
+        _runButton.BackgroundColor = enabled ? Good : Color.FromArgb("#303A47");
+        _runButton.TextColor = enabled ? ToolUi.Background : ToolUi.Muted;
+    }
+
+    // ------------------------------------------------------------------ IUserModePrompter
+
+    public Task ShowInfoAsync(string message) =>
+        DisplayAlertAsync("Information", message, "OK");
+
+    public Task<bool> AskCheckboxAsync(string message) =>
+        DisplayAlertAsync("Option", message, "Enabled", "Disabled");
+
+    public async Task<int> AskChoiceAsync(string message, IReadOnlyList<string> options)
+    {
+        var choice = await DisplayActionSheetAsync(message, null, null, options.ToArray());
+        return choice is null ? -1 : options.ToList().IndexOf(choice);
+    }
+
+    public Task<bool> ConfirmSaveAsync(string summary) =>
+        DisplayAlertAsync("Done", summary + "\n\nWould you like to save the files?", "Save", "Discard");
 }

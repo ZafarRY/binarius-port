@@ -37,4 +37,11 @@
     </None>
   </ItemGroup>
 
+  <!-- net10.0/Android: LZCompressLib.dll hanya untuk Windows x86 -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <Compile Remove="Utils\Interop.cs" />
+    <Compile Include="..\..\..\src\Binarius.Nikki\Interop.cs" Link="Utils\InteropManaged.cs" />
+    <ProjectReference Include="..\..\..\src\Binarius.Core\Binarius.Core.csproj" />
+  </ItemGroup>
+
 </Project>

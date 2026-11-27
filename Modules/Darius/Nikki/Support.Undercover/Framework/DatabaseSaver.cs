@@ -73,7 +73,7 @@ namespace Nikki.Support.Undercover.Framework
 
 		private void WriteFromStream()
 		{
-			var directory = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
+			var directory = Path.GetTempPath();
 			var filename = Path.GetFileName(this._options.File);
 			filename = Path.Combine(directory, filename);
 

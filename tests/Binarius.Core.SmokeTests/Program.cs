@@ -4,6 +4,7 @@ using Binarius.Core.Services;
 using Binarius.Core.Compression;
 using Binarius.Core.Hashing;
 using Binarius.Core.Launchers;
+using Binarius.Core.Storage;
 
 static void Equal<T>(T expected, T actual, string name)
 {
@@ -240,5 +241,93 @@ Equal(true, parsedEnd.EndscriptExists(present.Contains), "endscript exists");
 var missing = parsedEnd.MissingFiles(present.Contains);
 Equal(1, missing.Count, "missing files count");
 Equal("GLOBAL\\GLOBALB.LZC", missing[0], "missing file name");
+
+// ---- Script path fixing (Windows scripts on a case-sensitive FS)
+var modIndex = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+{
+    ["binary/_install.end"] = "Binary/_Install.end",
+    ["binary"] = "Binary"
+};
+string? ResolveMod(string path) => modIndex.TryGetValue(path, out var real) ? real : null;
+
+var fixedScript = ScriptPathFixer.Fix(
+    "[VERSN2]\r\n" +
+    "append \"binary\\_install.end\"\r\n" +
+    "import Binary FRONTEND\\FRONTB.LZC STRBlocks Files\\a.bin\r\n" +
+    "infobox \"Keep C:\\Games\\Path as text\"\r\n" +
+    "// comment with back\\slash\r\n",
+    ResolveMod);
+Equal(true, fixedScript.Contains("append \"Binary/_Install.end\""), "append path fixed with real casing");
+Equal(true, fixedScript.Contains("FRONTEND/FRONTB.LZC"), "game file token normalized");
+Equal(true, fixedScript.Contains("Files/a.bin"), "import path normalized");
+Equal(true, fixedScript.Contains("C:\\Games\\Path as text"), "infobox text untouched");
+Equal(true, fixedScript.Contains("back\\slash"), "comments untouched");
+Equal(true, fixedScript.Contains("\r\n"), "line endings kept");
+Equal(false, ScriptPathFixer.IsScript("x.end", "[VERSN1]\n{}"), "launcher is not a script");
+Equal(true, ScriptPathFixer.IsScript("x.end", "[VERSN2]\nappend a"), "VERSN2 is a script");
+
+// ---- Staging and write-back
+var tmp = Path.Combine(Path.GetTempPath(), "binarius-smoke-" + Guid.NewGuid().ToString("N"));
+try
+{
+    var modRoot = Path.Combine(tmp, "modsrc");
+    var gameRoot = Path.Combine(tmp, "gamesrc");
+    Directory.CreateDirectory(Path.Combine(modRoot, "Binary"));
+    Directory.CreateDirectory(Path.Combine(gameRoot, "FrontEnd"));
+    Directory.CreateDirectory(Path.Combine(gameRoot, "Languages"));
+    File.WriteAllText(Path.Combine(modRoot, "Binary", "_Install.end"), "[VERSN2]\nappend sub\\x.end\n");
+    File.WriteAllBytes(Path.Combine(gameRoot, "FrontEnd", "FrontB.lzc"), new byte[] { 1, 2, 3 });
+    File.WriteAllBytes(Path.Combine(gameRoot, "Languages", "Labels.bin"), new byte[] { 9, 9 });
+
+    var launcher = new EndLauncher
+    {
+        Game = "Underground2",
+        Endscript = "binary\\_install.end",
+        Files = { "FRONTEND\\FRONTB.LZC" },
+        Links = { new LaunchLink { LoadType = "Labels", PathType = "Absolute", File = "languages\\labels.bin" } }
+    };
+
+    var modTree = new LocalFileTree(modRoot);
+    var gameTree = new LocalFileTree(gameRoot);
+    var work = Path.Combine(tmp, "work");
+
+    var staged = UserModeStager.Stage(launcher, modTree, gameTree, work);
+    Equal("Binary/_Install.end", staged.Endscript, "endscript real casing");
+    Equal("FRONTEND/FRONTB.LZC", staged.Files[0], "staged file upper-case");
+    Equal(true, File.Exists(Path.Combine(staged.GameDir, "FRONTEND", "FRONTB.LZC")), "game file staged");
+    Equal(true, File.Exists(Path.Combine(staged.GameDir, "languages", "labels.bin")), "link file staged");
+    Equal(true, File.ReadAllText(Path.Combine(staged.ModDir, "Binary", "_Install.end")).Contains("sub/x.end"),
+        "staged script normalized");
+
+    // nothing changed -> nothing written
+    var untouched = UserModeStager.WriteBack(staged, gameTree);
+    Equal(0, untouched.Written, "unchanged files are not written");
+
+    // second run: change one file and add one
+    var launcher2 = new EndLauncher
+    {
+        Game = "Underground2",
+        Endscript = "Binary/_Install.end",
+        Files = { "FrontEnd/FrontB.lzc" }
+    };
+    var staged2 = UserModeStager.Stage(launcher2, modTree, gameTree, Path.Combine(tmp, "work2"));
+
+    File.WriteAllBytes(Path.Combine(staged2.GameDir, "FRONTEND", "FRONTB.LZC"), new byte[] { 7, 7, 7, 7 });
+    Directory.CreateDirectory(Path.Combine(staged2.GameDir, "NEW"));
+    File.WriteAllBytes(Path.Combine(staged2.GameDir, "NEW", "added.bin"), new byte[] { 5 });
+
+    var result = UserModeStager.WriteBack(staged2, gameTree);
+    Equal(2, result.Written, "changed + new file written");
+    Equal(1, result.Backups, "one backup for the changed file");
+    Equal(4, File.ReadAllBytes(Path.Combine(gameRoot, "FrontEnd", "FrontB.lzc")).Length,
+        "write-back keeps original casing");
+    Equal(3, File.ReadAllBytes(Path.Combine(gameRoot, "FrontEnd", "FrontB.lzc.bacc")).Length,
+        "backup holds the original bytes");
+    Equal(true, File.Exists(Path.Combine(gameRoot, "NEW", "added.bin")), "new file written");
+}
+finally
+{
+    if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
+}
 
 Console.WriteLine("Binarius.Core smoke tests passed.");
