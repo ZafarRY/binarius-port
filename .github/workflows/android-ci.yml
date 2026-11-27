@@ -51,10 +51,11 @@ jobs:
           dotnet restore tests/Binarius.Core.SmokeTests/Binarius.Core.SmokeTests.csproj
 
       - name: Run core smoke tests
+        shell: bash
         run: |
           dotnet run \
             --project tests/Binarius.Core.SmokeTests/Binarius.Core.SmokeTests.csproj \
-            --configuration Release
+            --configuration Release 2>&1 | tee smoke.log
 
       - name: Compile check Nikki engine
         run: |
@@ -68,13 +69,57 @@ jobs:
           tail -3 nikki-build.log
 
       - name: Build Binarius APK
+        shell: bash
         run: |
           dotnet publish src/Binarius.Android/Binarius.Android.csproj \
             --configuration Debug \
             --framework net10.0-android \
             --runtime android-arm64 \
             -p:AndroidPackageFormats=apk \
-            -p:EmbedAssembliesIntoApk=true
+            -p:EmbedAssembliesIntoApk=true \
+            -p:TreatWarningsAsErrors=false \
+            -v:minimal -nologo 2>&1 | tee build.log
+
+      # Laporan ringkas: jalan walau step sebelumnya gagal
+      - name: Build report
+        if: always()
+        shell: bash
+        run: |
+          STRIP='s#/home/runner/work/[^/]*/[^/]*/##g'
+          cat build.log nikki-build.log 2>/dev/null > all.log || true
+
+          grep -E ' error [A-Za-z]+[0-9]+:' all.log | sed "$STRIP" | sort -u > errors.txt || true
+          grep -E ' warning [A-Za-z]+[0-9]+:' all.log | sed "$STRIP" | sort -u > warnings.txt || true
+          touch errors.txt warnings.txt
+
+          {
+            echo "BINARIUS BUILD REPORT"
+            echo "Errors: $(wc -l < errors.txt)   Warnings (unique): $(wc -l < warnings.txt)"
+            echo
+            echo "== ERRORS"
+            head -150 errors.txt
+            echo
+            echo "== WARNINGS BY CODE (jumlah)"
+            sed -E 's/.*warning ([A-Za-z]+[0-9]+):.*/\1/' warnings.txt | sort | uniq -c | sort -rn | head -30
+            echo
+            echo "== SMOKE TESTS (akhir log)"
+            tail -20 smoke.log 2>/dev/null || true
+          } > build-report.txt
+
+          {
+            echo '```'
+            cat build-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          path: build-report.txt
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
 
       # Pilih tepat satu APK (utamakan yang -Signed, karena itu yang bisa diinstall)
       - name: Pick single APK
