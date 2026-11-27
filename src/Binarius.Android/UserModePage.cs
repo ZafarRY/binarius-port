@@ -508,6 +508,21 @@ public sealed class UserModePage : ContentPage, IUserModePrompter
             "Cancel");
         if (!proceed) return;
 
+        if (!UserModeRunner.HasAllFilesAccess())
+        {
+            var open = await DisplayAlertAsync(
+                "Log folder",
+                "To save MainLog.txt in Internal storage/Binarius/logs, allow \"All files access\" " +
+                "for Binarius. Otherwise the log is kept in the app's private folder.",
+                "Open settings",
+                "Skip");
+            if (open)
+            {
+                UserModeRunner.OpenAllFilesAccessSettings();
+                return; // run again after granting the permission
+            }
+        }
+
         SetRunEnabled(false);
         _validateButton.IsEnabled = false;
 

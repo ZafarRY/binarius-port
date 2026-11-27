@@ -9,12 +9,16 @@ namespace Binarius.Android;
 
 internal static class UserModeRunner
 {
-    public static async Task<UserModeOutcome> RunAsync(
+        public static async Task<UserModeOutcome> RunAsync(
         EndLauncher launcher, StagedLaunch staged, string keysDir,
         IUserModePrompter prompter, Action<string> log)
     {
         var outcome = new UserModeOutcome();
         ConfigureEngine(keysDir);
+
+        // The engine writes relative files (e.g. MainLog.txt). The default working
+        // directory on Android is "/" (read-only), so point it at a writable log folder.
+        System.Environment.CurrentDirectory = ResolveLogDir();
 
         var launch = new Launch
         {
@@ -29,6 +33,8 @@ internal static class UserModeRunner
                 LoadType = l.LoadType, PathType = l.PathType, File = l.File
             }).ToList()
         };
+
+        // ... sisanya tidak berubah
 
         var endscriptPath = System.IO.Path.Combine(staged.ModDir, staged.Endscript);
         var parser = new EndScriptParser(endscriptPath);
@@ -134,6 +140,46 @@ internal static class UserModeRunner
         outcome.SaveErrors.AddRange(saveErrors);
         outcome.Saved = saveErrors.Length == 0;
         return outcome;
+    }
+
+    /// <summary>Public log folder if writable, otherwise the app's private folder.</summary>
+    internal static string ResolveLogDir()
+    {
+        try
+        {
+            var root = global::Android.OS.Environment.ExternalStorageDirectory?.AbsolutePath
+                       ?? "/storage/emulated/0";
+            var dir = System.IO.Path.Combine(root, "Binarius", "logs");
+            System.IO.Directory.CreateDirectory(dir);
+
+            var probe = System.IO.Path.Combine(dir, ".write_test");
+            System.IO.File.WriteAllText(probe, string.Empty);
+            System.IO.File.Delete(probe);
+            return dir;
+        }
+        catch
+        {
+            var dir = System.IO.Path.Combine(
+                Microsoft.Maui.Storage.FileSystem.AppDataDirectory, "logs");
+            System.IO.Directory.CreateDirectory(dir);
+            return dir;
+        }
+    }
+
+    /// <summary>True when the app may write to /storage/emulated/0 directly.</summary>
+    internal static bool HasAllFilesAccess() =>
+        !OperatingSystem.IsAndroidVersionAtLeast(30)
+        || global::Android.OS.Environment.IsExternalStorageManager;
+
+    /// <summary>Opens the "All files access" settings screen for this app.</summary>
+    internal static void OpenAllFilesAccessSettings()
+    {
+        var context = global::Android.App.Application.Context;
+        var intent = new global::Android.Content.Intent(
+            global::Android.Provider.Settings.ActionManageAppAllFilesAccessPermission,
+            global::Android.Net.Uri.Parse($"package:{context.PackageName}"));
+        intent.AddFlags(global::Android.Content.ActivityFlags.NewTask);
+        context.StartActivity(intent);
     }
 
     private static void ConfigureEngine(string keysDir)
