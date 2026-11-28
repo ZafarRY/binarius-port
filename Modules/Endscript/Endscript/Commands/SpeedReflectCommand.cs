@@ -30,12 +30,7 @@ namespace Endscript.Commands
 			var dir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
 			var speedfrom = Path.Combine(dir, "SpeedReflect.asi");
 
-			if (!File.Exists(speedfrom))
-			{
-
-				throw new FileNotFoundException("SpeedReflect.asi was not found");
-
-			}
+			if (!File.Exists(speedfrom)) return; // PC-only ASI plugin: nothing to install on Android
 
 			if (String.Compare(this._type, "auto", StringComparison.OrdinalIgnoreCase) == 0)
 			{

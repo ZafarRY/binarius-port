@@ -81,7 +81,16 @@ namespace Endscript.Core
 		{
 			var path = filename + delim + manager + delim + cname;
 			if (this._map.TryGetValue(path, out var result)) return result;
-			else throw new LookupFailException($"Collection named {cname} does not exist");
+
+			var prefix = filename + delim + manager + delim;
+			var known = System.Linq.Enumerable.Take(
+				System.Linq.Enumerable.Select(
+					System.Linq.Enumerable.Where(this._map.Keys,
+						k => k.StartsWith(prefix, StringComparison.Ordinal)),
+					k => k.Substring(prefix.Length)), 5);
+
+			throw new LookupFailException(
+				$"Collection named {cname} does not exist (found: {string.Join(", ", known)})");
 		}
 	
 		public bool ContainsCollection(string filename, string manager, string cname)

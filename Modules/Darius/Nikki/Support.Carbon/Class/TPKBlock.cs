@@ -557,7 +557,7 @@ namespace Nikki.Support.Carbon.Class
             if (fname.EndsWith(".tpk") || fname.EndsWith(".TPK"))
             {
             
-                fname = Path.GetFileNameWithoutExtension(fname).ToUpper();
+                fname = Path.GetFileNameWithoutExtension(fname.Replace('\', '/')).ToUpper();
 
                 if (this.Manager is null)
                 {
