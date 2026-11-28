@@ -137,14 +137,36 @@ public static class UserModeStager
 
     private static readonly Regex ScriptTokens = new("\"[^\"]*\"|\\S+", RegexOptions.Compiled);
 
+    // Commands whose target database file is argument 1 / argument 2 (0 = command name).
+    private static readonly HashSet<string> FileAsArg1 = new(StringComparer.Ordinal)
+    {
+        "update_collection", "update_string", "update_texture", "update_incareer",
+        "add_collection", "add_string", "add_texture", "add_incareer",
+        "remove_collection", "remove_string", "remove_texture", "remove_incareer",
+        "copy_collection", "copy_texture", "copy_incareer",
+        "replace_texture", "add_or_update_string", "add_or_replace_texture",
+        "static", "delete",
+        "move_collection_up", "move_collection_down",
+        "move_collection_first", "move_collection_last"
+    };
+
+    private static readonly HashSet<string> FileAsArg2 = new(StringComparer.Ordinal)
+    {
+        "bind_textures", "import", "import_all"
+    };
+
     /// <summary>
-    /// move_file / erase_file may touch game files that the launcher does not list.
-    /// Copy those (when they exist in the game folder) into the working copy.
+    /// Scans the mod scripts and stages game files they need but the launcher does not list:
+    /// database files used by collection commands (they get loaded too), and files touched by
+    /// move_file / erase_file with absolute paths.
     /// </summary>
     private static void StageReferencedGameFiles(
         IFileTree game, string modDir, IReadOnlyList<string> modFiles,
         string gameDir, StagedLaunch staged, Action<string>? log)
     {
+        var databases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var plainFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var rel in modFiles)
         {
             var ext = Path.GetExtension(rel).ToLowerInvariant();
@@ -160,24 +182,48 @@ public static class UserModeStager
                     .Select(m => m.Value.Trim('"'))
                     .ToArray();
 
-                string? wanted = null;
-                if (t.Length == 6 && t[0] == "move_file" && t[2] == "absolute") wanted = t[4];
-                else if (t.Length == 3 && t[0] == "erase_file" && t[1] == "absolute") wanted = t[2];
-                if (wanted is null) continue;
+                if (t.Length < 2 || t[0].StartsWith("//", StringComparison.Ordinal)) continue;
 
-                var path = LauncherPaths.Normalize(wanted).Trim('/');
-                if (path.Length == 0 || staged.GameMap.ContainsKey(path)) continue;
-
-                var local = Path.Combine(gameDir, path);
-                if (File.Exists(local)) continue;
-
-                var source = game.Resolve(path);
-                if (source is null) continue;
-
-                log?.Invoke($"Copying game file {path}");
-                CopyOut(game, source, local);
-                staged.GameMap[path] = source;
+                if (FileAsArg1.Contains(t[0])) databases.Add(t[1]);
+                else if (t.Length > 2 && FileAsArg2.Contains(t[0])) databases.Add(t[2]);
+                else if (t.Length == 6 && t[0] == "move_file" && t[2] == "absolute") plainFiles.Add(t[4]);
+                else if (t.Length == 3 && t[0] == "erase_file" && t[1] == "absolute") plainFiles.Add(t[2]);
             }
+        }
+
+        // Database files: stage under the upper-case name and register them for loading.
+        foreach (var name in databases)
+        {
+            var wanted = LauncherPaths.Normalize(name).Trim('/');
+            if (wanted.Length == 0) continue;
+
+            var key = wanted.ToUpperInvariant();
+            if (staged.Files.Contains(key)) continue;
+
+            var source = game.Resolve(wanted);
+            if (source is null) continue; // not in the game folder: the script reports it
+
+            log?.Invoke($"Copying game file {wanted}");
+            CopyOut(game, source, Path.Combine(gameDir, key));
+            staged.GameMap[key] = source;
+            staged.Files.Add(key);
+        }
+
+        // Plain files (move_file source, erase_file target): copy only, never loaded.
+        foreach (var name in plainFiles)
+        {
+            var path = LauncherPaths.Normalize(name).Trim('/');
+            if (path.Length == 0 || staged.GameMap.ContainsKey(path)) continue;
+
+            var local = Path.Combine(gameDir, path);
+            if (File.Exists(local)) continue;
+
+            var source = game.Resolve(path);
+            if (source is null) continue;
+
+            log?.Invoke($"Copying game file {path}");
+            CopyOut(game, source, local);
+            staged.GameMap[path] = source;
         }
     }
 
