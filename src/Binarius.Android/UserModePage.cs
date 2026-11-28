@@ -21,7 +21,7 @@ public sealed class UserModePage : ContentPage, IUserModePrompter
 
     private readonly Label _summary = new()
     {
-        Text = "No End Launcher selected yet.",
+        Text = "Select the mod folder to detect its End Launcher.",
         FontFamily = "monospace",
         FontSize = 13,
         TextColor = ToolUi.Primary
@@ -50,7 +50,7 @@ public sealed class UserModePage : ContentPage, IUserModePrompter
 
     private readonly Label _status = new()
     {
-        Text = "Select an End Launcher to begin.",
+        Text = "Select the mod folder to begin.",
         FontSize = 14,
         TextColor = ToolUi.Muted
     };
@@ -231,15 +231,6 @@ public sealed class UserModePage : ContentPage, IUserModePrompter
 
     private async void OnPickModFolder(object? sender, EventArgs e)
     {
-        if (_launcher is null)
-        {
-            await DisplayAlertAsync(
-                "Launcher required",
-                "Select a valid User End Launcher first.",
-                "OK");
-            return;
-        }
-
         try
         {
             var uri = await AndroidFolderPicker.PickAsync(
@@ -248,17 +239,68 @@ public sealed class UserModePage : ContentPage, IUserModePrompter
             if (uri is null)
                 return;
 
-            _modFolder = new AndroidSafFolder(uri);
+            var folder = new AndroidSafFolder(uri);
 
-            var name = await _modFolder.GetDisplayNameAsync();
+            SetStatus("Looking for the End Launcher...", ToolUi.Muted);
 
-            _modFolderLabel.Text = name;
+            var (valid, problems) = await Task.Run(() => FindLaunchers(folder));
 
-            _validateButton.IsEnabled = false;
+            if (valid.Count == 0)
+            {
+                _modFolder = null;
+                _launcher = null;
+                _validateButton.IsEnabled = false;
+                SetRunEnabled(false);
+
+                _modFolderLabel.Text = "No mod folder selected.";
+                _summary.Text = "No valid User End Launcher found.";
+
+                SetStatus(
+                    problems.Count > 0
+                        ? "No valid User End Launcher in this folder: " + problems[0]
+                        : "No .endlauncher file found in this folder.",
+                    Bad);
+                return;
+            }
+
+            (string Path, EndLauncher Launcher) chosen = valid[0];
+
+            if (valid.Count > 1)
+            {
+                var names = valid.Select(v => v.Path).ToArray();
+                var pick = await DisplayActionSheetAsync(
+                    "Multiple launchers found", "Cancel", null, names);
+
+                if (pick is null || pick == "Cancel")
+                    return;
+
+                chosen = valid.First(v => v.Path == pick);
+            }
+
+            var launcher = chosen.Launcher;
+            var gameChanged = _launcher is not null
+                && !Equals(_launcher.GameId, launcher.GameId);
+
+            _launcher = launcher;
+            _modFolder = folder;
+
+            ShowLauncher(System.IO.Path.GetFileName(chosen.Path), launcher);
+
+            _modFolderLabel.Text = await folder.GetDisplayNameAsync();
+
+            if (gameChanged)
+            {
+                _gameFolder = null;
+                _gameFolderLabel.Text = "No game folder selected.";
+            }
+
+            _validateButton.IsEnabled = _gameFolder is not null;
             SetRunEnabled(false);
 
             SetStatus(
-                "Mod folder selected. Select the game folder next.",
+                _gameFolder is null
+                    ? $"Found launcher for {launcher.GameId}. Select the game folder next."
+                    : $"Found launcher for {launcher.GameId}. You can validate the package now.",
                 Good);
         }
         catch (Exception ex)
@@ -267,13 +309,57 @@ public sealed class UserModePage : ContentPage, IUserModePrompter
         }
     }
 
+    /// <summary>Finds valid User End Launchers: root of the folder first, then subfolders.</summary>
+    private static (List<(string Path, EndLauncher Launcher)> Valid, List<string> Problems)
+        FindLaunchers(AndroidSafFolder folder)
+    {
+        static bool IsLauncher(string path) =>
+            path.EndsWith(".endlauncher", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".end", StringComparison.OrdinalIgnoreCase);
+      
+        var candidates = folder.ListRootFiles().Where(IsLauncher).ToList();
+
+        if (candidates.Count == 0)
+            candidates = folder.ListFiles().Where(IsLauncher).ToList();
+
+        var valid = new List<(string, EndLauncher)>();
+        var problems = new List<string>();
+
+        foreach (var path in candidates)
+        {
+            try
+            {
+                string text;
+                using (var stream = folder.OpenRead(path))
+                using (var reader = new StreamReader(stream))
+                    text = reader.ReadToEnd();
+
+                var launcher = EndLauncherReader.Parse(
+                    text, System.IO.Path.GetFileName(path));
+
+                launcher.EnsureUserMode();
+                valid.Add((path, launcher));
+            }
+            catch (LauncherException ex)
+            {
+                problems.Add($"{path}: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                problems.Add($"{path}: {ex.Message}");
+            }
+        }
+
+        return (valid, problems);
+    }
+
     private async void OnPickGameFolder(object? sender, EventArgs e)
     {
         if (_launcher is null)
         {
             await DisplayAlertAsync(
-                "Launcher required",
-                "Select a valid User End Launcher first.",
+                "Mod folder required",
+                "Select the mod folder first so its End Launcher can be detected.",
                 "OK");
             return;
         }

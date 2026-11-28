@@ -163,6 +163,10 @@ public sealed class AndroidSafFolder : IFileTree
     private static string[] Split(string path) =>
         path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
 
+    /// <summary>Names of the files directly inside the selected folder.</summary>
+    public IReadOnlyList<string> ListRootFiles() =>
+        Children(RootId).Where(n => !n.IsDir).Select(n => n.Name).ToList();
+  
     public IReadOnlyList<string> ListFiles()
     {
         var result = new List<string>();

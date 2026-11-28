@@ -756,7 +756,7 @@ namespace Nikki.Support.Underground1.Class
             if (fname.EndsWith(".tpk") || fname.EndsWith(".TPK"))
             {
 
-                fname = Path.GetFileNameWithoutExtension(fname.Replace('\', '/')).ToUpper();
+                fname = Path.GetFileNameWithoutExtension(fname.Replace((char)92, '/')).ToUpper();
 
                 if (this.Manager is null)
                 {

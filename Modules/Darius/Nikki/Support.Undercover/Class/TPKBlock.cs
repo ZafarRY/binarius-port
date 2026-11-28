@@ -557,7 +557,7 @@ namespace Nikki.Support.Undercover.Class
             if (fname.EndsWith(".xml") || fname.EndsWith(".XML"))
             {
 
-                fname = Path.GetFileNameWithoutExtension(fname.Replace('\', '/')).ToUpper();
+                fname = Path.GetFileNameWithoutExtension(fname.Replace((char)92, '/')).ToUpper();
 
                 if (this.Manager is null)
                 {
