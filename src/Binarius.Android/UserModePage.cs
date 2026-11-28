@@ -626,17 +626,18 @@ public sealed class UserModePage : ContentPage, IUserModePrompter
             await EnsureKeysAsync(keysDir, launcher);
 
             var outcome = await UserModeRunner.RunAsync(launcher, staged, keysDir, this, Log);
+            var logPath = await Task.Run(() => WriteRunLog(launcher, outcome));
 
             if (outcome.Failure is not null)
             {
                 SetStatus("The endscript could not be applied. No game files were changed.", Bad);
-                _details.Text = outcome.Failure;
+                _details.Text = outcome.Failure + LogNote(logPath);
                 return;
             }
 
             if (!outcome.Saved)
             {
-                _details.Text = FormatErrors(outcome);
+                _details.Text = FormatErrors(outcome) + LogNote(logPath);
                 SetStatus(
                     outcome.SaveErrors.Count > 0
                         ? "Saving failed. No game files were changed."
@@ -652,7 +653,8 @@ public sealed class UserModePage : ContentPage, IUserModePrompter
                 $"Written  : {result.Written}\n" +
                 $"Deleted  : {result.Deleted}\n" +
                 $"Backups  : {result.Backups} (.bacc)" +
-                (outcome.ScriptErrors.Count > 0 ? "\n\n" + FormatErrors(outcome) : string.Empty);
+                (outcome.ScriptErrors.Count > 0 ? "\n\n" + FormatErrors(outcome) : string.Empty) +
+                LogNote(logPath);
 
             SetStatus(
                 outcome.ScriptErrors.Count == 0
@@ -675,6 +677,53 @@ public sealed class UserModePage : ContentPage, IUserModePrompter
 
             _validateButton.IsEnabled = true;
             SetRunEnabled(true);
+        }
+    }
+
+    private static string LogNote(string? path) =>
+        path is null ? string.Empty : $"\n\nFull log: {path}";
+
+    /// <summary>Writes every failure and script error of the last run to RunLog.txt.</summary>
+    private static string? WriteRunLog(EndLauncher launcher, UserModeOutcome outcome)
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(UserModeRunner.ResolveLogDir(), "RunLog.txt");
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Binarius run : {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine($"Game         : {launcher.GameId}");
+            sb.AppendLine($"Endscript    : {launcher.Endscript}");
+
+            if (outcome.Failure is not null)
+            {
+                sb.AppendLine();
+                sb.AppendLine("FAILURE:");
+                sb.AppendLine(outcome.Failure);
+            }
+
+            if (outcome.ScriptErrors.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine($"SCRIPT ERRORS ({outcome.ScriptErrors.Count}):");
+                foreach (var error in outcome.ScriptErrors)
+                    sb.AppendLine(error);
+            }
+
+            if (outcome.SaveErrors.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine($"SAVE ERRORS ({outcome.SaveErrors.Count}):");
+                foreach (var error in outcome.SaveErrors)
+                    sb.AppendLine(error);
+            }
+
+            System.IO.File.WriteAllText(path, sb.ToString());
+            return path;
+        }
+        catch
+        {
+            return null;
         }
     }
 

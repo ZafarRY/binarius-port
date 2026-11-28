@@ -82,15 +82,28 @@ namespace Endscript.Core
 			var path = filename + delim + manager + delim + cname;
 			if (this._map.TryGetValue(path, out var result)) return result;
 
-			var prefix = filename + delim + manager + delim;
-			var known = System.Linq.Enumerable.Take(
-				System.Linq.Enumerable.Select(
-					System.Linq.Enumerable.Where(this._map.Keys,
-						k => k.StartsWith(prefix, StringComparison.Ordinal)),
-					k => k.Substring(prefix.Length)), 5);
+			var files = new HashSet<string>();
+			var managers = new HashSet<string>();
+			var names = new List<string>();
+
+			foreach (var key in this._map.Keys)
+			{
+				var p = key.Split(delim);
+				if (p.Length < 3) continue;
+
+				files.Add(p[0]);
+				if (p[0] != filename) continue;
+
+				managers.Add(p[1]);
+				if (p[1] == manager && names.Count < 5) names.Add(p[2]);
+			}
 
 			throw new LookupFailException(
-				$"Collection named {cname} does not exist (found: {string.Join(", ", known)})");
+				$"Collection named {cname} does not exist " +
+				$"[file loaded: {files.Contains(filename)}; " +
+				$"managers: {string.Join(", ", managers)}; " +
+				$"collections: {string.Join(", ", names)}; " +
+				$"files: {string.Join(", ", files)}]");
 		}
 	
 		public bool ContainsCollection(string filename, string manager, string cname)

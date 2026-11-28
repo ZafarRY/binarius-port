@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Binarius.Core.Storage;
+using System.Text.RegularExpressions;
 
 namespace Binarius.Core.Launchers;
 
@@ -92,6 +93,8 @@ public static class UserModeStager
             staged.Links.Add(copy);
         }
 
+        StageReferencedGameFiles(game, modDir, modFiles, gameDir, staged, log);
+
         foreach (var path in Directory.EnumerateFiles(gameDir, "*", SearchOption.AllDirectories))
             staged.Snapshot[RelativeTo(gameDir, path)] = Hash(path);
 
@@ -130,6 +133,52 @@ public static class UserModeStager
         }
 
         return new WriteBackResult(written, deleted, backups);
+    }
+
+    private static readonly Regex ScriptTokens = new("\"[^\"]*\"|\\S+", RegexOptions.Compiled);
+
+    /// <summary>
+    /// move_file / erase_file may touch game files that the launcher does not list.
+    /// Copy those (when they exist in the game folder) into the working copy.
+    /// </summary>
+    private static void StageReferencedGameFiles(
+        IFileTree game, string modDir, IReadOnlyList<string> modFiles,
+        string gameDir, StagedLaunch staged, Action<string>? log)
+    {
+        foreach (var rel in modFiles)
+        {
+            var ext = Path.GetExtension(rel).ToLowerInvariant();
+            if (ext != ".end" && ext != ".endscript") continue;
+
+            string[] lines;
+            try { lines = File.ReadAllLines(Path.Combine(modDir, rel)); }
+            catch { continue; }
+
+            foreach (var line in lines)
+            {
+                var t = ScriptTokens.Matches(line)
+                    .Select(m => m.Value.Trim('"'))
+                    .ToArray();
+
+                string? wanted = null;
+                if (t.Length == 6 && t[0] == "move_file" && t[2] == "absolute") wanted = t[4];
+                else if (t.Length == 3 && t[0] == "erase_file" && t[1] == "absolute") wanted = t[2];
+                if (wanted is null) continue;
+
+                var path = LauncherPaths.Normalize(wanted).Trim('/');
+                if (path.Length == 0 || staged.GameMap.ContainsKey(path)) continue;
+
+                var local = Path.Combine(gameDir, path);
+                if (File.Exists(local)) continue;
+
+                var source = game.Resolve(path);
+                if (source is null) continue;
+
+                log?.Invoke($"Copying game file {path}");
+                CopyOut(game, source, local);
+                staged.GameMap[path] = source;
+            }
+        }
     }
 
     private static bool Backup(IFileTree game, string target)
