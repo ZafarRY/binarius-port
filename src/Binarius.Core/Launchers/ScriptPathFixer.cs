@@ -5,7 +5,7 @@ namespace Binarius.Core.Launchers;
 public static class ScriptPathFixer
 {
     private static readonly Regex Token = new("\"[^\"]*\"|\\S+", RegexOptions.Compiled);
-    private static readonly Regex PathLike = new(@"^(?:[^\\/:*?""<>|]+\\)+[^\\/:*?""<>|]*$", RegexOptions.Compiled);
+    private static readonly Regex PathLike = new(@"^(?:[^\\/:*?""<>|]+[\\/])+[^\\/:*?""<>|]*$", RegexOptions.Compiled);
     private static readonly HashSet<string> TextCommands = new(StringComparer.Ordinal)
     { "infobox", "checkbox", "combobox" };
 
@@ -47,7 +47,7 @@ public static class ScriptPathFixer
     {
         var quoted = value.Length >= 2 && value[0] == '"' && value[^1] == '"';
         var inner = quoted ? value[1..^1] : value;
-        if (!inner.Contains('\\') || !PathLike.IsMatch(inner)) return value;
+        if (!(inner.Contains('\\') || inner.Contains('/')) || !PathLike.IsMatch(inner)) return value;
 
         var path = inner.Replace('\\', '/');
         var trailing = path.EndsWith('/');

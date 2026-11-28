@@ -41,6 +41,24 @@ public static class UserModeStager
 
         string? Real(string path) => index.TryGetValue(path, out var real) ? real : null;
 
+        // Script paths are relative to the main endscript's folder, the index is relative to the mod root.
+        var endscriptRel = LauncherPaths.Normalize(launcher.Endscript).Trim('/');
+        var scriptSlash = endscriptRel.LastIndexOf('/');
+        var scriptDir = scriptSlash > 0 ? endscriptRel[..scriptSlash] : string.Empty;
+
+        string? RealFromScript(string path)
+        {
+            var direct = Real(path);
+            if (direct is not null) return direct;
+            if (scriptDir.Length == 0) return null;
+
+            var nested = Real(scriptDir + "/" + path);
+            return nested is not null
+                && nested.StartsWith(scriptDir + "/", StringComparison.OrdinalIgnoreCase)
+                ? nested[(scriptDir.Length + 1)..]
+                : null;
+        }
+
         foreach (var rel in modFiles)
         {
             var local = Path.Combine(modDir, rel);
@@ -49,10 +67,9 @@ public static class UserModeStager
 
             var text = File.ReadAllText(local);
             if (!ScriptPathFixer.IsScript(rel, text)) continue;
-            File.WriteAllText(local, ScriptPathFixer.Fix(text, Real), new UTF8Encoding(false));
+            File.WriteAllText(local, ScriptPathFixer.Fix(text, RealFromScript), new UTF8Encoding(false));
         }
 
-        var endscriptRel = LauncherPaths.Normalize(launcher.Endscript).Trim('/');
         var endscript = Real(endscriptRel)
             ?? throw new LauncherException($"Endscript not found in the mod folder: {launcher.Endscript}");
 
@@ -166,6 +183,8 @@ public static class UserModeStager
     {
         var databases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var plainFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var scriptCreated = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // any "new"
+        var scriptLoaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);  // negate / synchronize
 
         foreach (var rel in modFiles)
         {
@@ -186,9 +205,33 @@ public static class UserModeStager
 
                 if (FileAsArg1.Contains(t[0])) databases.Add(t[1]);
                 else if (t.Length > 2 && FileAsArg2.Contains(t[0])) databases.Add(t[2]);
+                else if (t.Length == 3 && t[0] == "new")
+                {
+                    var target = LauncherPaths.Normalize(t[2]).Trim('/');
+                    scriptCreated.Add(target);
+                    if (t[1] != "override") scriptLoaded.Add(target);
+                }
                 else if (t.Length == 6 && t[0] == "move_file" && t[2] == "absolute") plainFiles.Add(t[4]);
                 else if (t.Length == 3 && t[0] == "erase_file" && t[1] == "absolute") plainFiles.Add(t[2]);
             }
+        }
+
+        // Files the script loads itself with "new": copy them, but do not preload.
+        databases.RemoveWhere(d => scriptCreated.Contains(LauncherPaths.Normalize(d).Trim('/')));
+
+        foreach (var name in scriptLoaded)
+        {
+            if (name.Length == 0) continue;
+
+            var key = name.ToUpperInvariant();
+            if (staged.GameMap.ContainsKey(key) || staged.Files.Contains(key)) continue;
+
+            var source = game.Resolve(name);
+            if (source is null) continue;
+
+            log?.Invoke($"Copying game file {name}");
+            CopyOut(game, source, Path.Combine(gameDir, key));
+            staged.GameMap[key] = source;
         }
 
         // Database files: stage under the upper-case name and register them for loading.
