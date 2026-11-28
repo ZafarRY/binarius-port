@@ -122,9 +122,9 @@ namespace Endscript.Core
 				else throw new RuntimeAnalysisException("Closing 'end' command was never found");
 
 			}
-			catch (RuntimeAnalysisException runtime) { throw runtime; }
+			catch (RuntimeAnalysisException) { throw; }
 			catch (IndexOutOfRangeException) { throw new Exception("Unable to find end to a selectable statement"); }
-			catch (Exception ex) { throw ex; }
+			catch (Exception) { throw; }
 		}
 
 		/// <summary>

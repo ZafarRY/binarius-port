@@ -88,7 +88,7 @@ namespace Nikki.Support.MostWanted.Framework
 		{
 			var array = new byte[4];
 			using var fs = new FileStream(this._options.File, FileMode.Open, FileAccess.Read);
-			fs.Read(array, 0, 4);
+			fs.ReadAtLeast(array, 4, throwOnEndOfStream: false);
 			var type = BitConverter.ToInt32(array, 0);
 			return Enum.IsDefined(typeof(LZCompressionType), type);
 		}

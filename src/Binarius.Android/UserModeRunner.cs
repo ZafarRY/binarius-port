@@ -174,6 +174,8 @@ internal static class UserModeRunner
     /// <summary>Opens the "All files access" settings screen for this app.</summary>
     internal static void OpenAllFilesAccessSettings()
     {
+        if (!OperatingSystem.IsAndroidVersionAtLeast(30)) return;
+      
         var context = global::Android.App.Application.Context;
         var intent = new global::Android.Content.Intent(
             global::Android.Provider.Settings.ActionManageAppAllFilesAccessPermission,

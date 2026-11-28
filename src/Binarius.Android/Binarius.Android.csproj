@@ -17,6 +17,7 @@
     <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
     <AndroidPackageFormats>apk</AndroidPackageFormats>
     <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
+    <NoWarn>$(NoWarn);CS8012</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

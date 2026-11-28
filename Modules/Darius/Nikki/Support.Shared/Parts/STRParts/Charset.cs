@@ -30,8 +30,6 @@ namespace Nikki.Support.Shared.Parts.STRParts
         /// <summary>
 		/// Initializes new instance of <see cref="Charset"/>.
 		/// </summary>
-		/// <param name="block"><see cref="STRBlock"/> to which this 
-		/// <see cref="Charset"/> belongs to.</param>
 		public Charset()
         {
             this.NumEntries = 0;

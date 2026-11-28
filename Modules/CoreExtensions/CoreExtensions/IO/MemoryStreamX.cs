@@ -103,7 +103,7 @@ namespace CoreExtensions.IO
 		{
 			stream.Position = 0;
 			var array = new byte[stream.Length];
-			stream.Read(array, 0, (int)stream.Length);
+		  stream.ReadExactly(array, 0, array.Length);
 			return array;
 		}
 	}
