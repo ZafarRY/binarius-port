@@ -193,13 +193,13 @@ public static class LzCodec
         }
     }
 
-    // ------------------------------------------------------------------ HUFF
 
     /// <summary>MSB-first bit reader; reads past the end return zero bits.</summary>
     private ref struct HuffBits
     {
         private readonly ReadOnlySpan<byte> _s;
         private int _pos;
+    // ------------------------------------------------------------------ HUFF
         private ulong _buf;
         private int _cnt;
 
@@ -310,7 +310,7 @@ public static class LzCodec
             var s = prev;
             while (skip > 0)
             {
-                if (++s > 255) throw new InvalidDataException("Invalid HUFF symbol table.");
+                s = (s + 1) & 0xFF; // wraps around, like the original 8-bit counter
                 if (!used[s]) skip--;
             }
             used[s] = true;
