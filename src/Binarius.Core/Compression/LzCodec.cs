@@ -42,8 +42,7 @@ public static class LzCodec
             case TypeJdlz: DecodeJdlz(input, output); break;
             case TypeComp: DecodeComp(input, output); break;
             case TypeRfpk: DecodeRfpk(input, output); break;
-            case TypeHuff:
-                throw new NotSupportedException("HUFF decompression is not ported yet.");
+            case TypeHuff: DecodeHuff(input, output); break;
             default:
                 throw new InvalidDataException($"Unsupported LZ type 0x{type:X8}.");
         }
@@ -190,6 +189,248 @@ public static class LzCodec
                     CopyLiterals(src, ref ip, dst, ref op, b0 & 3);
                     break;
                 }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ HUFF
+
+    /// <summary>MSB-first bit reader; reads past the end return zero bits.</summary>
+    private ref struct HuffBits
+    {
+        private readonly ReadOnlySpan<byte> _s;
+        private int _pos;
+        private ulong _buf;
+        private int _cnt;
+
+        public HuffBits(ReadOnlySpan<byte> s)
+        {
+            _s = s;
+            _pos = 0;
+            _buf = 0;
+            _cnt = 0;
+        }
+
+        public bool Overrun => _pos - (_cnt >> 3) > _s.Length + 8;
+
+        private void Fill()
+        {
+            while (_cnt <= 56)
+            {
+                ulong b = (uint)_pos < (uint)_s.Length ? _s[_pos] : 0u;
+                _buf |= b << (56 - _cnt);
+                _pos++;
+                _cnt += 8;
+            }
+        }
+
+        public uint Peek(int n)
+        {
+            if (n == 0) return 0;
+            if (_cnt < n) Fill();
+            return (uint)(_buf >> (64 - n));
+        }
+
+        public void Skip(int n)
+        {
+            if (n == 0) return;
+            if (_cnt < n) Fill();
+            _buf <<= n;
+            _cnt -= n;
+        }
+
+        public uint Read(int n)
+        {
+            var v = Peek(n);
+            Skip(n);
+            return v;
+        }
+    }
+
+    /// <summary>Variable-length number: z zeros, a 1, then (z+2) bits v; result v + 2^(z+2) - 4.</summary>
+    private static int HuffCount(ref HuffBits br)
+    {
+        var zeros = 0;
+        while (br.Read(1) == 0)
+        {
+            if (++zeros > 28 || br.Overrun)
+                throw new InvalidDataException("Corrupt HUFF stream.");
+        }
+
+        var width = zeros + 2;
+        return (int)br.Read(width) + (1 << width) - 4;
+    }
+
+    private static void DecodeHuff(ReadOnlySpan<byte> src, byte[] dst)
+    {
+        var br = new HuffBits(src.Slice(HeaderSize));
+
+        // RefPack-like header: flags, optional packed size, unpacked size, escape symbol.
+        var flags = (int)br.Read(16);
+        var large = (flags & 0x8000) != 0;
+        if ((flags & 0x0100) != 0) br.Skip(large ? 32 : 24);
+        flags &= ~0x0100;
+        var declaredSize = (int)br.Read(large ? 32 : 24);
+        var escape = (int)br.Read(8);
+
+        // Canonical code table: number of codes for each bit length.
+        var count = new int[18];
+        var limit = new int[18];
+        var offset = new int[18];
+        int code = 0, total = 0, maxLen = 0;
+
+        for (var len = 1; ; len++)
+        {
+            if (len > 16) throw new InvalidDataException("Invalid HUFF code table.");
+
+            code <<= 1;
+            offset[len] = code - total;
+
+            var n = HuffCount(ref br);
+            if (n < 0 || total + n > 256)
+                throw new InvalidDataException("Invalid HUFF code table.");
+
+            count[len] = n;
+            code += n;
+            total += n;
+            limit[len] = n != 0 ? (code << (16 - len)) & 0xFFFF : 0;
+            maxLen = len;
+
+            if (n != 0 && limit[len] == 0) break; // code space is full
+        }
+        limit[maxLen] = int.MaxValue;
+
+        // Symbols in code order, stored as gaps between unused byte values.
+        var symbols = new byte[total];
+        var used = new bool[256];
+        var prev = -1;
+        for (var k = 0; k < total; k++)
+        {
+            var skip = HuffCount(ref br) + 1;
+            var s = prev;
+            while (skip > 0)
+            {
+                if (++s > 255) throw new InvalidDataException("Invalid HUFF symbol table.");
+                if (!used[s]) skip--;
+            }
+            used[s] = true;
+            symbols[k] = (byte)s;
+            prev = s;
+        }
+
+        // 8-bit fast lookup for the short codes.
+        var fastSym = new byte[256];
+        var fastLen = new byte[256];
+        Array.Fill(fastLen, (byte)0x40);
+        var escLen = 0;
+        var next = 0;
+        var pos = 0;
+        for (var len = 1; len <= maxLen && len <= 8; len++)
+        {
+            var span = 1 << (8 - len);
+            for (var c = 0; c < count[len]; c++)
+            {
+                var sym = symbols[next++];
+                byte tag = (byte)len;
+                if (sym == escape)
+                {
+                    escLen = len;
+                    tag = 0x60;
+                }
+                if (pos + span > 256) throw new InvalidDataException("Invalid HUFF code table.");
+                for (var j = 0; j < span; j++)
+                {
+                    fastSym[pos + j] = sym;
+                    fastLen[pos + j] = tag;
+                }
+                pos += span;
+            }
+        }
+
+        // Decode.
+        var op = 0;
+        while (op < dst.Length)
+        {
+            if (br.Overrun) throw new InvalidDataException("Compressed stream is truncated.");
+
+            var idx = (int)br.Peek(8);
+            var tag = fastLen[idx];
+            int symbol;
+
+            if (tag <= 8)
+            {
+                br.Skip(tag);
+                symbol = fastSym[idx];
+            }
+            else
+            {
+                int len;
+                if (tag == 0x60)
+                {
+                    len = escLen;
+                }
+                else
+                {
+                    if (maxLen < 9) throw new InvalidDataException("Invalid HUFF code.");
+                    var top = (int)br.Peek(16);
+                    len = 9;
+                    while (len < maxLen && top >= limit[len]) len++;
+                }
+
+                var bits = (int)br.Peek(len);
+                br.Skip(len);
+                var index = bits - offset[len];
+                if ((uint)index >= (uint)total) throw new InvalidDataException("Invalid HUFF code.");
+                symbol = symbols[index];
+            }
+
+            if (symbol != escape)
+            {
+                dst[op++] = (byte)symbol;
+                continue;
+            }
+
+            // Escape: run of the previous byte, literal byte, or end of stream.
+            var run = HuffCount(ref br);
+            if (run != 0)
+            {
+                if (op == 0) throw new InvalidDataException("Invalid HUFF run.");
+                var last = dst[op - 1];
+                var end = Math.Min(op + run, dst.Length);
+                while (op < end) dst[op++] = last;
+                continue;
+            }
+
+            if (br.Read(1) != 0) break; // end marker
+            dst[op++] = (byte)br.Read(8);
+        }
+
+        // Optional delta filters.
+        var size = declaredSize > 0 ? Math.Min(declaredSize, dst.Length) : dst.Length;
+        switch (flags)
+        {
+            case 0x32FB:
+            case 0xB2FB:
+            {
+                var sum = 0;
+                for (var i = 0; i < size; i++)
+                {
+                    sum += dst[i];
+                    dst[i] = (byte)sum;
+                }
+                break;
+            }
+            case 0x34FB:
+            case 0xB4FB:
+            {
+                int sum = 0, sum2 = 0;
+                for (var i = 0; i < size; i++)
+                {
+                    sum += dst[i];
+                    sum2 += sum;
+                    dst[i] = (byte)sum2;
+                }
+                break;
             }
         }
     }
